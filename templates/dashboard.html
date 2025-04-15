@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>8-bit WireGuard Interface &amp; Peer Management</title>
+  <!-- Use a pixel-style font for an 8-bit look -->
+  <link href="https://fonts.googleapis.com/css?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* ========== Basic 8-bit Aesthetic ========== */
+    body {
+      background-color: #000;
+      color: #0F0;
+      font-family: 'Press Start 2P', cursive;
+      margin: 0;
+      padding: 0;
+      line-height: 1.4;
+    }
+    .container {
+      margin: 2em auto;
+      max-width: 900px;
+      background-color: #000;
+      padding: 20px;
+      border: 3px solid #0F0;
+      border-radius: 0; /* 8-bit: keep corners square */
+      text-align: center;
+    }
+    h1, h2 {
+      margin-bottom: 1em;
+      font-weight: normal;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+    /* ========== Label & Select ========== */
+    label {
+      display: block;
+      margin-bottom: 0.5em;
+      text-align: left;
+      font-size: 12px;
+      margin-left: 0.5em;
+    }
+    select {
+      display: block;
+      margin: 0 auto 1em;
+      width: 80%;
+      padding: 0.75em;
+      border: 2px solid #0F0;
+      background-color: #000;
+      color: #0F0;
+      font-size: 12px;
+      border-radius: 0;
+    }
+    /* ========== Top Bar with Add Peer Button ========== */
+    .top-bar {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-bottom: 1em;
+    }
+    .add-btn {
+      display: inline-block;
+      padding: 0.7em 1.2em;
+      border: 2px solid #0F0;
+      background-color: #0F0;
+      color: #000;
+      text-decoration: none;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .add-btn:hover {
+      background-color: #0C0;
+      border-color: #0C0;
+    }
+    /* ========== Table Layout ========== */
+    .table-wrapper {
+      width: 100%;
+      margin: 0 auto;
+      overflow-x: hidden; /* avoid horizontal scrollbar */
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1em;
+    }
+    th, td {
+      border: 2px solid #0F0;
+      padding: 0.75em;
+      vertical-align: middle;
+      white-space: normal;
+      word-break: break-all;
+    }
+    th {
+      background-color: #000;
+      font-weight: normal;
+      font-size: 12px;
+      text-align: center;
+    }
+    td {
+      font-size: 11px;
+      text-align: left;
+    }
+    tr:hover {
+      background-color: #010;
+    }
+    /* ========== Action Buttons ========== */
+    .btn-container {
+      display: flex;
+      gap: 0.5em;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    /* Unified styling for anchor-based buttons */
+    a.button, button.button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 36px;
+      min-width: 60px;
+      padding: 0 10px;
+      border: 2px solid #0F0;
+      background-color: #0F0;
+      color: #000;
+      text-decoration: none;
+      cursor: pointer;
+      font-size: 10px;
+      line-height: normal;
+      white-space: nowrap;
+      transition: background-color 0.2s;
+      border-radius: 0;
+      /* Remove default appearance for <button> */
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      outline: none;
+    }
+    a.button:hover, button.button:hover {
+      background-color: #0C0;
+    }
+    /* ========== Responsive Adjustments ========== */
+    @media (max-width: 768px) {
+      .container {
+        margin: 1em;
+        padding: 1em;
+      }
+      h1, h2 {
+        font-size: 16px;
+        margin-bottom: 0.7em;
+      }
+      label {
+        margin-left: 0.2em;
+      }
+      select {
+        width: 90%;
+      }
+      table, th, td {
+        font-size: 10px;
+      }
+      .btn-container {
+        flex-direction: column;
+      }
+      a.button, button.button {
+        margin-top: 4px;
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>8-bit WireGuard Interface &amp; Peer Management</h1>
+    <!-- Top bar with "Add Peer" button -->
+    <div class="top-bar">
+      <a href="/peer/add_page" class="add-btn">Add Peer</a>
+    </div>
+    <!-- Interface Selection -->
+    <label for="interfaceSelect">Select Interface:</label>
+    <select id="interfaceSelect" onchange="loadPeers()">
+      <option value="">Select Interface</option>
+    </select>
+    <!-- Peer List -->
+    <h2>Peer List</h2>
+    <div class="table-wrapper">
+      <table id="peerTable">
+        <thead>
+          <tr>
+            <th style="width: 15%;">Name</th>
+            <th style="width: 30%;">PublicKey</th>
+            <th style="width: 15%;">Address</th>
+            <th style="width: 15%;">AllowedIPs</th>
+            <th style="width: 25%;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Peer rows will be inserted by JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    // Load interfaces from /interfaces endpoint
+    function loadInterfaces() {
+      fetch('/interfaces', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      .then(response => {
+        if (response.ok) return response.json();
+        throw new Error('Failed to load interfaces');
+      })
+      .then(data => {
+        const interfaceSelect = document.getElementById('interfaceSelect');
+        interfaceSelect.innerHTML = '<option value="">Select Interface</option>';
+        data.forEach(item => {
+          const option = document.createElement('option');
+          option.value = item.name;
+          option.textContent = item.name;
+          interfaceSelect.appendChild(option);
+        });
+      })
+      .catch(error => console.error('Error:', error));
+    }
+
+    // Load peers for the selected interface from /interfaces/{interfaceName}/peers
+    function loadPeers() {
+      const interfaceName = document.getElementById('interfaceSelect').value;
+      const peerTableBody = document.querySelector('#peerTable tbody');
+      peerTableBody.innerHTML = ''; // Clear previous rows
+      if (!interfaceName) return;
+      
+      fetch(`/interfaces/${interfaceName}/peers`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      .then(response => {
+        if (response.ok) return response.json();
+        throw new Error('Failed to load peers');
+      })
+      .then(data => {
+        if (data.length === 0) {
+          const tr = document.createElement('tr');
+          const td = document.createElement('td');
+          td.colSpan = 5;
+          td.textContent = 'No peers found';
+          tr.appendChild(td);
+          peerTableBody.appendChild(tr);
+        } else {
+          data.forEach(peer => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${peer.name}</td>
+              <td>${peer.public_key}</td>
+              <td>${peer.address}</td>
+              <td>${peer.allowed_ips}</td>
+              <td>
+                <div class="btn-container">
+                  <!-- Delete form using POST -->
+                  <form action="/peer/delete" method="post" style="display:inline;">
+                    <input type="hidden" name="id" value="${peer.id}">
+                    <input type="hidden" name="interface" value="${interfaceName}">
+                    <button type="submit" class="button">Delete</button>
+                  </form>
+                  <a href="/peer/qrcode/${peer.id}?interface=${interfaceName}" target="_blank" class="button">QR Code</a>
+                  <a href="/peer/download_config/${peer.id}?interface=${interfaceName}" class="button">Download<br>Config</a>
+                </div>
+              </td>
+            `;
+            peerTableBody.appendChild(tr);
+          });
+        }
+      })
+      .catch(error => console.error('Error:', error));
+    }
+
+    window.onload = loadInterfaces;
+  </script>
+</body>
+</html>

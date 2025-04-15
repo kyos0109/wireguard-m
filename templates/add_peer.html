@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>新增 Peer - WireGuard 管理系統</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- 引入 TweetNaCl.js 用於金鑰生成 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
+  <style>
+    /* 暗色系、精簡且細緻的風格 */
+    body {
+      background-color: #121212;
+      color: #e0e0e0;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      margin: 2em auto;
+      max-width: 600px;
+      background-color: #1e1e1e;
+      padding: 2em;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 1em;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.5em;
+    }
+    select,
+    input[type="text"] {
+      width: 100%;
+      padding: 0.75em;
+      margin-bottom: 1em;
+      border: 1px solid #444;
+      border-radius: 4px;
+      background-color: #2e2e2e;
+      color: #e0e0e0;
+    }
+    button {
+      width: 100%;
+      padding: 0.75em;
+      border: none;
+      border-radius: 4px;
+      background-color: #388e3c;
+      color: #fff;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    button:hover {
+      background-color: #2e7d32;
+    }
+    a {
+      color: #4fc3f7;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>新增 Peer</h1>
+    <form id="addPeerForm">
+      <label for="interfaceSelect">請選擇介面：</label>
+      <select id="interfaceSelect" name="interface" required>
+        <option value="">請選擇介面</option>
+      </select>
+      
+      <label for="peerName">Peer 名稱：</label>
+      <input type="text" id="peerName" name="name" required>
+
+      <label for="peerPublicKey">Peer PublicKey：</label>
+      <input type="text" id="peerPublicKey" name="public_key">
+
+      <label for="peerPrivateKey">Peer PrivateKey：</label>
+      <input type="text" id="peerPrivateKey" name="private_key">
+
+      <label for="peerAddress">Address (例如：10.0.0.x/32)：</label>
+      <input type="text" id="peerAddress" name="address" placeholder="10.0.0.x/32" required>
+
+      <label for="peerAllowedIPs">AllowedIPs (例如：10.0.0.x/32)：</label>
+      <input type="text" id="peerAllowedIPs" name="allowed_ips" placeholder="10.0.0.x/32" required>
+
+      <button type="button" onclick="submitPeer()">新增</button>
+    </form>
+    <p style="text-align: center;"><a href="/dashboard">返回介面與 Peer 管理</a></p>
+  </div>
+
+  <script>
+    let interfacesMap = {};
+
+    function arrayBufferToBase64(buffer) {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return window.btoa(binary);
+    }
+
+    function generateKeyPair() {
+      const keyPair = nacl.box.keyPair();
+      return {
+        publicKey: arrayBufferToBase64(keyPair.publicKey),
+        privateKey: arrayBufferToBase64(keyPair.secretKey)
+      };
+    }
+
+    function loadInterfaces() {
+      fetch('/interfaces', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      .then(response => {
+        if (response.ok) return response.json();
+        throw new Error('取得介面失敗');
+      })
+      .then(data => {
+        const interfaceSelect = document.getElementById('interfaceSelect');
+        interfaceSelect.innerHTML = '<option value="">請選擇介面</option>';
+  
+        data.forEach(item => {
+    
+          interfacesMap[item.name] = item.server_public_key;
+          const option = document.createElement('option');
+          option.value = item.name;
+    
+          option.textContent = item.name;
+          interfaceSelect.appendChild(option);
+        });
+      })
+      .catch(error => console.error('Error:', error));
+    }
+
+    function submitPeer() {
+      const interfaceSelect = document.getElementById('interfaceSelect');
+      const selectedInterface = interfaceSelect.value;
+      if (!selectedInterface) {
+        alert("請先選擇介面");
+        return;
+      }
+
+      const form = document.getElementById('addPeerForm');
+      const formData = new FormData(form);
+
+
+      let peerPublicKey = formData.get('public_key');
+      let peerPrivateKey = formData.get('private_key');
+      if (!peerPublicKey || !peerPrivateKey) {
+        const keys = generateKeyPair();
+        peerPublicKey = keys.publicKey;
+        peerPrivateKey = keys.privateKey;
+        document.getElementById('peerPublicKey').value = peerPublicKey;
+        document.getElementById('peerPrivateKey').value = peerPrivateKey;
+      }
+
+
+      const peerObj = {
+        name: formData.get('name'),
+        public_key: peerPublicKey,
+        private_key: peerPrivateKey,
+        address: formData.get('address'),
+        allowed_ips: formData.get('allowed_ips'),
+  
+        server_public_key: interfacesMap[selectedInterface]
+      };
+
+
+      const payload = {};
+      payload[selectedInterface] = [peerObj];
+
+      fetch('/peer/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(response => {
+        if (response.ok) return response.json();
+        throw new Error('新增 Peer 失敗');
+      })
+      .then(data => {
+        if (data.error) {
+          alert("錯誤：" + data.error);
+        } else {
+          alert("新增 Peer 成功");
+    
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('新增 Peer 時發生錯誤');
+      });
+    }
+
+    window.onload = loadInterfaces;
+  </script>
+</body>
+</html>
