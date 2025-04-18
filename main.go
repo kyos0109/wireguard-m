@@ -28,6 +28,7 @@ func main() {
 
 	models.PeersStorePath = flag.String("peers", "data/peers.json", "Peers Store Path")
 	models.ConfigPath = flag.String("config", "data/config.json", "Config Path")
+	flag.Parse()
 
 	r.SetHTMLTemplate(loadTemplates())
 
